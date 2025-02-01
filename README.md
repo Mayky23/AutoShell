@@ -36,6 +36,7 @@ python3 AutoShell.py
 2️⃣ Selecciona el lenguaje de la shell.  
 3️⃣ Introduce la IP atacante y el puerto.  
 4️⃣ Elige la ruta de guardado.  
+5️⃣​ Ejecuta el cliente en la victima y obtendrás una shell reversa
 
 ### ⚠️ Advertencia  
 AutoShell es una herramienta educativa. **El autor no se responsabiliza del uso mal intencionado de esta herramienta.**  
