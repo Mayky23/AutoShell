@@ -4,10 +4,15 @@ AutoShell es una herramienta para generar shells reversas en distintos lenguajes
 
 ## 🚀 Características  
 ✅ **Genera shells reversas en Python, PHP, Node.js, Bash y PowerShell**.  
+
 ✅ **Permite seleccionar el sistema operativo de la víctima**.  
+
 ✅ **Crea el script del cliente**. 
+
 ✅ **Permite la ejecución remota de comandos desde la herramienta**.
+
 ✅ **Shells completamente interactivas**.  
+
 ✅ **Compatible con Linux, Windows y macOS**.  
 
 ---  
