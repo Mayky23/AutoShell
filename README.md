@@ -1,7 +1,4 @@
-# AutoShell
-  Script to stabilize reverse Shell automatically
-
-# Ultimate Reverse Shell Upgrader 🚀
+# AutoShell 🚀
 
 Herramienta para automatizar la mejora de shells inversas a TTY completamente interactivas con detección inteligente de entornos.
 
