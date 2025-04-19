@@ -26,7 +26,10 @@ $ ./AutoShell.sh 4444
 connect to [192.168.10.100] from (UNKNOWN) [192.168.10.101] 53944
 [+] Conexión establecida
 [*] Mejorando shell...
-[+] Shell mejorada con éxito! # ¡Shell interactiva lista!
+[+] Shell mejorada con éxito!
+[+] Shell estabilizada correctamente
+[*] Transfiriendo control al usuario...
+user@victim:/home/user$  # <-- Aquí tienes control directo y permanente
 ```
 
 ## 🛡 Características clave
