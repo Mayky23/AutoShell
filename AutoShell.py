@@ -33,6 +33,8 @@ def stabilize_shell(client):
     # Configurar entorno terminal
     client.send(b'export TERM=xterm-256color\n')
     client.send(b'stty rows 40 columns 180\n')
+    # Desactivar el eco en el lado remoto
+    client.send(b'stty -echo\n')
     time.sleep(1)
 
 def handler(client, address, port):
