@@ -33,3 +33,6 @@ usuario@debian:~$ stty rows 40 columns 180
 # SHELL COMPLETAMENTE INTERACTIVA
 usuario@debian:~$ 
 ```
+
+## Contribuyente : 
+- [@Sergio](https://github.com/Serhi0)
