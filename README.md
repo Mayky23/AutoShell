@@ -26,7 +26,6 @@ $ ./AutoShell.py 4444
 
 # COMANDOS EJECUTADOS AUTOMATICAMANTE 
 usuario@debian:~$ python -c "import pty; pty.spawn('/bin/bash')"
-usuario@debian:~$ python3 -c "import pty; pty.spawn('/bin/bash')"
 usuario@debian:~$ echo "stty raw -echo; fg" > /tmp/.stab && chmod +x /tmp/.stab
 usuario@debian:~$ export TERM=xterm-256color
 usuario@debian:~$ stty rows 40 columns 180
@@ -34,3 +33,6 @@ usuario@debian:~$ stty rows 40 columns 180
 # SHELL COMPLETAMENTE INTERACTIVA
 usuario@debian:~$ 
 ```
+
+## Contribuyente : 
+- [@Sergio](https://github.com/Serhi0)
